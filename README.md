@@ -5,7 +5,9 @@ This project implements a Convolutional Variational Autoencoder (VAE) to learn a
 ## Features
 
 - **Convolutional Architecture**: Uses convolutional layers for both encoder and decoder to preserve spatial relationships
-- **Configurable Latent Space**: Default 3D latent space for visualization, but configurable for different dimensions
+- **Configurable Latent Space**: Default 20D latent space for rich representation with clustering analysis for visualization
+- **Unsupervised Clustering**: K-means and DBSCAN clustering of latent representations
+- **Dimensionality Reduction**: t-SNE, UMAP, and PCA for 2D visualization of high-dimensional latent space
 - **GPU Acceleration**: Optimized for NVIDIA GPUs (tested on GTX 1080 Ti)
 - **TensorBoard Integration**: Comprehensive logging and visualization
 - **Checkpointing**: Save and resume training with model checkpoints
@@ -180,6 +182,25 @@ Key metrics to monitor:
 3. **KL Loss**: Measures how well the latent space follows a normal distribution
 4. **Reconstructions**: Visual quality should improve over epochs
 5. **Latent Space**: Should show meaningful clustering and smooth transitions
+
+## Latent Space Analysis
+
+The project includes advanced latent space analysis with:
+
+#### Clustering Algorithms
+- **K-means**: Automatic optimal cluster detection using silhouette analysis
+- **DBSCAN**: Density-based clustering for irregular cluster shapes
+
+#### Dimensionality Reduction
+- **PCA**: Principal Component Analysis with explained variance
+- **t-SNE**: t-Distributed Stochastic Neighbor Embedding for local structure
+- **UMAP**: Uniform Manifold Approximation and Projection for global structure
+
+#### Visualization Features
+- 2D scatter plots with cluster coloring
+- Correlation matrices of latent dimensions
+- Cluster center heatmaps
+- Representative skin generation for each cluster
 
 ## File Structure
 

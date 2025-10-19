@@ -325,10 +325,7 @@ class VAETrainer:
         self.model.train()
     
     def log_latent_space(self, data_loader: DataLoader, epoch: int, max_samples: int = 1000):
-        """Log latent space visualization to TensorBoard."""
-        if self.model.latent_dim > 3:
-            return  # Only visualize for 3D or lower
-        
+        """Log latent space visualization to TensorBoard with clustering and dimensionality reduction."""
         self.model.eval()
         latent_vectors = []
         
@@ -345,29 +342,95 @@ class VAETrainer:
             
             latent_vectors = np.concatenate(latent_vectors, axis=0)[:max_samples]
             
-            if self.model.latent_dim == 3:
-                # 3D scatter plot
-                fig = plt.figure(figsize=(10, 8))
-                ax = fig.add_subplot(111, projection='3d')
-                ax.scatter(latent_vectors[:, 0], latent_vectors[:, 1], latent_vectors[:, 2], alpha=0.6)
-                ax.set_xlabel('Latent Dim 1')
-                ax.set_ylabel('Latent Dim 2')
-                ax.set_zlabel('Latent Dim 3')
-                ax.set_title(f'3D Latent Space (Epoch {epoch})')
-                self.writer.add_figure('Latent_Space_3D', fig, epoch)
-                plt.close(fig)
-            
-            elif self.model.latent_dim == 2:
-                # 2D scatter plot
-                fig, ax = plt.subplots(figsize=(8, 8))
-                ax.scatter(latent_vectors[:, 0], latent_vectors[:, 1], alpha=0.6)
-                ax.set_xlabel('Latent Dim 1')
-                ax.set_ylabel('Latent Dim 2')
-                ax.set_title(f'2D Latent Space (Epoch {epoch})')
-                self.writer.add_figure('Latent_Space_2D', fig, epoch)
-                plt.close(fig)
+            # Apply clustering and dimensionality reduction for high-dimensional latent spaces
+            self._visualize_latent_space_with_clustering(latent_vectors, epoch)
         
         self.model.train()
+    
+    def _visualize_latent_space_with_clustering(self, latent_vectors: np.ndarray, epoch: int):
+        """Apply clustering and dimensionality reduction for latent space visualization."""
+        from sklearn.cluster import KMeans
+        from sklearn.manifold import TSNE
+        import umap
+        import seaborn as sns
+        
+        # Apply K-means clustering
+        n_clusters = min(8, len(latent_vectors) // 10)  # Adaptive number of clusters
+        if n_clusters > 1:
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            cluster_labels = kmeans.fit_predict(latent_vectors)
+        else:
+            cluster_labels = np.zeros(len(latent_vectors))
+        
+        # Apply dimensionality reduction techniques
+        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+        
+        # 1. t-SNE visualization
+        if len(latent_vectors) > 5:  # Need minimum samples for t-SNE
+            tsne = TSNE(n_components=2, random_state=42, perplexity=min(30, len(latent_vectors)//4))
+            tsne_result = tsne.fit_transform(latent_vectors)
+            
+            scatter = axes[0, 0].scatter(tsne_result[:, 0], tsne_result[:, 1], 
+                                       c=cluster_labels, cmap='tab10', alpha=0.7, s=20)
+            axes[0, 0].set_title(f't-SNE Latent Space (Epoch {epoch})')
+            axes[0, 0].set_xlabel('t-SNE 1')
+            axes[0, 0].set_ylabel('t-SNE 2')
+            plt.colorbar(scatter, ax=axes[0, 0], label='Cluster')
+        
+        # 2. UMAP visualization
+        if len(latent_vectors) > 10:  # UMAP needs more samples
+            try:
+                umap_reducer = umap.UMAP(n_components=2, random_state=42, 
+                                       n_neighbors=min(15, len(latent_vectors)//2))
+                umap_result = umap_reducer.fit_transform(latent_vectors)
+                
+                scatter = axes[0, 1].scatter(umap_result[:, 0], umap_result[:, 1], 
+                                           c=cluster_labels, cmap='tab10', alpha=0.7, s=20)
+                axes[0, 1].set_title(f'UMAP Latent Space (Epoch {epoch})')
+                axes[0, 1].set_xlabel('UMAP 1')
+                axes[0, 1].set_ylabel('UMAP 2')
+                plt.colorbar(scatter, ax=axes[0, 1], label='Cluster')
+            except Exception as e:
+                axes[0, 1].text(0.5, 0.5, f'UMAP failed: {str(e)[:50]}...', 
+                               ha='center', va='center', transform=axes[0, 1].transAxes)
+                axes[0, 1].set_title('UMAP (Failed)')
+        
+        # 3. Latent space statistics
+        axes[1, 0].hist(latent_vectors.flatten(), bins=50, alpha=0.7, density=True)
+        axes[1, 0].set_title(f'Latent Space Distribution (Epoch {epoch})')
+        axes[1, 0].set_xlabel('Latent Value')
+        axes[1, 0].set_ylabel('Density')
+        
+        # 4. Cluster centers heatmap
+        if n_clusters > 1:
+            cluster_centers = []
+            for i in range(n_clusters):
+                cluster_mask = cluster_labels == i
+                if np.any(cluster_mask):
+                    center = latent_vectors[cluster_mask].mean(axis=0)
+                    cluster_centers.append(center)
+            
+            if cluster_centers:
+                cluster_centers = np.array(cluster_centers)
+                im = axes[1, 1].imshow(cluster_centers, aspect='auto', cmap='viridis')
+                axes[1, 1].set_title(f'Cluster Centers (Epoch {epoch})')
+                axes[1, 1].set_xlabel('Latent Dimension')
+                axes[1, 1].set_ylabel('Cluster')
+                plt.colorbar(im, ax=axes[1, 1])
+        else:
+            axes[1, 1].text(0.5, 0.5, 'Not enough data for clustering', 
+                           ha='center', va='center', transform=axes[1, 1].transAxes)
+        
+        plt.tight_layout()
+        self.writer.add_figure('Latent_Space_Analysis', fig, epoch)
+        plt.close(fig)
+        
+        # Log cluster information
+        if n_clusters > 1:
+            unique, counts = np.unique(cluster_labels, return_counts=True)
+            cluster_info = dict(zip(unique, counts))
+            for cluster_id, count in cluster_info.items():
+                self.writer.add_scalar(f'Clustering/Cluster_{cluster_id}_Size', count, epoch)
     
     def save_checkpoint(self, filepath: str, epoch: int, optimizer: optim.Optimizer, loss: float):
         """Save training checkpoint."""

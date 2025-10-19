@@ -8,8 +8,8 @@ IMAGE_SIZE = 64
 NUM_CHANNELS = 4  # RGBA
 
 # Model configuration
-LATENT_DIM = 3  # 3D for visualization, can be changed for experiments
-BETA = 0.5  # Beta-VAE parameter
+LATENT_DIM = 20  # 20D for better representation, use clustering for visualization
+BETA = 1  # Beta-VAE parameter
 
 # Training configuration
 BATCH_SIZE = 32
